@@ -6,35 +6,26 @@ description: >-
   and cost savings.
 image: https://kinlane-productions2.s3.amazonaws.com/apis-json/apis-json-logo.jpg
 url: https://raw.githubusercontent.com/apis-json/artisanal/main/apis/shipengine.yml
-created: 2023/10/6
-modified: 2023/10/6
-specificationVersion: '0.14'
+created: 2023-10-06
+modified: 2024-06-07
+specificationVersion: '0.18'
 tags: []
 apis:
   - name: ShipEngine API
     description: >-
-      ShipEngine's easy-to-use REST API lets you manage all of your shipping
-      needs without worrying about the complexities of different carrier APIs
-      and protocols. We handle all the heavy lifting so you can focus on
-      providing a first-class shipping experience for your customers at the best
-      possible prices.
+      ShipEngine's easy-to-use REST API lets you manage all of your shipping needs without worrying about the complexities of different carrier APIs and protocols. We handle all the heavy lifting so you can focus on providing a first-class shipping experience for your customers at the best possible prices.
     image: https://kinlane-productions2.s3.amazonaws.com/apis-json/apis-json-logo.jpg
-    humanURL: https://shipengine.github.io/shipengine-openapi/
+    humanURL: https://www.shipengine.com/docs/
     baseURL: https://api.example.com
     tags: []
     properties:
       - type: Documentation
-        url: https://example.com/documentation
+        url: https://www.shipengine.com/docs/
       - type: OpenAPI
-        url: >-
-          https://raw.githubusercontent.com/ShipEngine/shipengine-openapi/master/openapi.yaml
+        url: properties/shipengine-openapi-original.yml
     contact:
       - FN: ShipEngine
         url: https://www.shipengine.com/contact/
-    overlays:
-      - type: APIs.io Search
-        url: >-
-          overlays/https://raw.githubusercontent.com/ShipEngine/shipengine-openapi/master/openapi.yaml-openapi-search.yml
     aid: shipengine:shipengine-api
 common:
   - type: Getting Started
