@@ -1,0 +1,2442 @@
+openapi: 3.0.0
+info:
+  title: EasyPost API
+  description: >-
+    ## Authentication
+
+
+    Authentication and identification to the EasyPost API is done by providing
+    an API Key on every request as your Basic Auth username (no password is
+    required). EasyPost requires that all communication with the API is secured
+    using TLS v1.2. Requests made over HTTP or without a proper API Key will
+    fail.
+
+
+    EasyPost provides two types of API Key: Test and Production. You can test
+    all EasyPost functionality using your Test key, for free, immediately after
+    signing up.
+
+
+    You can manage your API Keys from your account.
+
+
+    Treat your API Keys as passwords—keep them secret. API Keys give full
+    read/write access to your account, so they should not be included in public
+    repositories, emails, client side code, etc. If yours gets leaked, you can
+    disable it on the dashboard's API Keys Page.
+
+
+    Here is an image from the postman docs showing how you can select your
+    authorization type (select basic auth):
+
+
+    ![Image
+    image](https://assets.postman.com/postman-docs/authorization-types.jpg)
+
+
+    ---
+
+
+    ## EasyPost Objects
+
+
+    The EasyPost API consists of many object types. There are several attributes
+    that are consistent across all objects:
+
+
+    id: Every EasyPost Object that can be created through the API has an id
+    field that is used to refer to the object in other API calls. An id consists
+    of a prefix based on the object type (e.g. Shipments have the prefix "shp_")
+    followed by 32 hex characters. These id values may be used in many API
+    endpoints to refer to an existing object rather than specifying the full
+    object definition; for instance in Shipment creation, you may specify the
+    to_address either with all fields (street1, city, zip, etc.) filled, or you
+    may reuse an existing Address by specifying only the id field value as the
+    matching Address's id, omitting all other fields.
+
+    object: Every first-class EasyPost object includes an object value. This can
+    be useful for identifying the types of nested objects, or for cases like
+    webhook Events which can contain many different types of result. For objects
+    where there are many variant types, such as Fees, the object value
+    represents the supertype, and the type represents the subtype for that
+    object.
+
+    reference: Many API objects also have an optional reference field that may
+    be assigned during creation. The reference values you assign may be used in
+    place of id values in many API endpoints, but we recommend using the
+    EasyPost-assigned id instead because ids are guaranteed to be unique within
+    the system, while reference uniqueness is not enforced. If your system does
+    not enforce uniqueness on the references you submit, this may result in the
+    wrong one of many objects with the same reference being picked in EasyPost's
+    handling of your API request.
+
+    created_at/updated_at: Most API objects also include values for created_at
+    and updated_at. These two fields respectively specify the time the object in
+    question was created and most recently updated. These datetime fields are
+    formatted according to ISO 8601.
+
+
+    ---
+
+    ## Errors
+
+
+    In the event of a client or server error, the response will contain the
+    standard 4xx or 5xx respectively, accompanied by a well-formed JSON body
+    describing the issue, e.g., a required field was omitted, a purchase failed,
+    etc.
+
+
+    Each client library will encapsulate these errors and raise an exception, in
+    addition to other exceptional cases, such as network failures. It is
+    recommended to handle exceptions gracefully and to report any issues to
+    support@easypost.com.
+  version: 1.0.0
+servers:
+  - url: http://{{api_base}}
+  - url: https://api.stripe.com
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+security:
+  - basicAuth: []
+tags:
+  - name: Basics
+    description: https://www.easypost.com/docs/
+  - name: Basics > Addresses
+    description: >-
+      https://www.easypost.com/docs/api#addresses
+
+
+      ## Addresses
+
+      Address objects are used to represent people, places, and organizations in
+      a number of contexts. For example, a Shipment requires a to_address and
+      from_address to accurately calculate rates and generate postage.
+
+
+      Additionally, EasyPost offers several verification tools that can be used
+      to detect deliverability issues, correct minor errors in
+      spelling/formatting, and determine if an Address is residential or not
+      (which has a significant effect on Shipment rating for many carriers).
+  - name: Basics > Parcels
+    description: >-
+      https://www.easypost.com/docs/api#parcels
+
+
+      Parcel objects represent the physical container being shipped. Dimensions
+      can be supplied either as length, width, and height dimensions, or a
+      predefined_package string. Only weight is required, but since many
+      carriers charge different rates for packages with large dimensions, we
+      strongly recommend including all dimensions if available.
+
+
+      Weights are in OUNCES (OZ) and go to one decimal point.
+
+
+      Dimensions are in INCHES (IN) and go to one decimal point.
+  - name: Basics > Insurances
+    description: >-
+      https://www.easypost.com/docs/api#insurance
+
+
+      ## Insurances
+
+      An Insurance object represents insurance for packages purchased both via
+      the EasyPost API as well as shipments purchased through third parties and
+      later registered with EasyPost. An Insurance is created automatically
+      whenever you buy a Shipment through EasyPost and pass insurance options
+      during the Buy call or in a later call to Insure a Shipment.
+
+
+      Insurance purchased through the Shipment Buy or Insure endpoints is
+      immediately insured - there is no possibility of rejection based on
+      tracking information, as the package was just created. On the other hand,
+      Insurance purchased on shipments purchased outside of EasyPost requires
+      creation with a tracking code so that EasyPost may confirm the package
+      existence and current shipping status at the time of purchase.
+
+
+      Standalone insurance is created in a pending state to help distinguish it
+      from insurance purchased for an EasyPost Shipment. Both kinds of Insurance
+      use the Tracking system to receive periodic updates, and will report those
+      updates to any appropriate Webhooks on file. Standalone insurance will
+      cancel itself if the tracking information for the given tracking code
+      shows evidence of having been shipped anytime before the insurance was
+      purchased.
+
+
+      Unlike Shipments within EasyPost, Insurance objects register To and From
+      Address objects according to the destination and ship-from locations of
+      the package. This means that a Shipment with "is_return: true" actually
+      ships to the listed From Address. Insurance does not have a concept of
+      "is_return", so all insurance records refer to their true package
+      destination as "to_address", regardless of whether or not the shipment is
+      a return.
+  - name: Basics > Shipments
+    description: >-
+      ## Shipments
+
+      The workhorse of the EasyPost API, a Shipment is made up of a "to" and
+      "from" Address, the Parcel being shipped, and any customs forms required
+      for international deliveries. Once created a Shipment object is used to
+      retrieve shipping Rates and purchase a label.
+
+
+      A Shipment created with a valid to_address, from_address, and parcel will
+      automatically populate its rates attribute.
+  - name: Basics > Rates
+    description: "After a\_**Shipment**\_is successfully created, it will automatically fetch\_**Rates**. You can limit the\_**CarrierAccounts**\_to use for rating by passing the\_*carrier_accounts*\_parameter upon\_**Shipment**\_creation.\n\nThere are three rate types: the actual rate that will be purchased,\_*rate*\_and\_*currency*, the published non-discounted rate,\_*list_rate*\_and\_*list_currency*, and the rate if purchased from the post office,\_*retail_rate*\_and\_*retail_currency*."
+  - name: Basics > Trackers
+    description: "A\_**Tracker**\_object contains all of the tracking information for a package. A\_**Tracker**\_is created automatically whenever you buy a\_**Shipment**\_through EasyPost; if you don’t use EasyPost to purchase your shipping labels, you can still track packages through our API by creating a\_**Tracker**\_object directly. Each\_**Tracker**\_is continually updated in the background as the package moves through its life cycle, regardless of whether or not the label was purchased through EasyPost.\n\nAfter creation, a\_**Tracker**\_object will be updated periodically based on when the carrier provides EasyPost with new tracking information. This information can be consumed by using our\_[webhooks](https://www.easypost.com/docs/api#events)\_infrastructure. Every time a\_**Tracker**\_is updated a webhook\_**Event**\_will be sent.\n\nThe\_**Tracker**\_object contains both the current information about the package as well as previous updates. All of the previous updates are stored in the\_*tracking_details*\_array. Each\_**TrackingDetail**\_object contains the\_*status*, the\_*message*\_from the carrier, and a\_**TrackingLocation**.\n\nThe\_**TrackingLocation**\_contains\_*city*,\_*state*,\_*country*, and\_*zip*\_information about the location where the package was scanned. The information each carrier provides is different, so some carriers may not make use of all of these fields.\n\nSome\_**Tracker**\_objects may also contain a\_**CarrierDetail**, which stores some additional information about the\_**Tracker**\_that the carrier has made available to EasyPost. The\_**CarrierDetail**\_object contains the\_*service*\_and\_*container_type*\_of the package. Additionally, it also stores the\_*est_delivery_date_local*\_and\_*est_delivery_time_local*, which provide information about the local delivery time.\n\nIt's worth noting that\_*tracking_codes*\_are not globally unique. Each carrier promises uniqueness for a given\_*tracking_code*\_for a certain period of time, but the length of time varies greatly based on the specific carrier and service level. The carriers do eventually recycle\_*tracking_codes*, and for this reason enforcing uniqueness on the\_*tracking_code*\_field is not recommended. EasyPost does, however, prevent the creation of duplicate\_**Trackers**\_based on\_*tracking_code*\_and\_*carrier*; duplicate requests by the same\_**User**\_will simply return the original\_**Tracker**."
+  - name: Advanced
+    description: https://www.easypost.com/docs/
+  - name: Advanced > Batches
+    description: >-
+      NOTE: batches_buy isn't on the main documentation and doesn't work with
+      the inplace created batch.
+
+
+      If looking to create a batch with more shipments, use add X shipments to
+      batch collection
+  - name: Advanced > Carrier Metadata
+  - name: Advanced > CustomsInfo
+  - name: Advanced > CustomsItem
+  - name: Advanced > Events
+    description: "Webhook\_**Events**\_are triggered by changes in objects you've created via the API. Every time an\_**Event**\_related to one of your objects is created, EasyPost guarantees at least one POST request will be sent to each of the webhook URLs set up for your account. For this reason, we strongly encourage your webhook handler to be idempotent. See the\_[webhooks guide](https://www.easypost.com/webhooks-guide)\_for more information."
+  - name: Advanced > Orders
+    description: >-
+      NOTE: Users are encouraged to integrate with the SHIPMENTS endpoint rather
+      than with this ORDERS endpoint, unless they require very specific FedEx,
+      UPS, or DHL Express Multi-parcel rates/labels support.
+
+
+      orders_create uses an inline set up
+
+
+      orders_create2 uses the current shipment to and from address with
+      predefined packages
+
+
+      Both set the environment variable ORDER_ID, which can be accessed by
+      orders_retrieve
+  - name: Advanced > Pickup
+    description: >-
+      use pickup_create_batch when trying to create a pickup with batches and
+      use pickup_create_shipment when trying to create a pickup with shipments,
+      with each one referencing the previously created batch or shipment in the
+      previous folders.
+  - name: Advanced > Reports
+  - name: Advanced > ScanForms
+    description: >-
+      Make sure that all of the batch shipments have been purchased before
+      attempting to create the scanform, as it will throw an error if not true. 
+  - name: Advanced > Webhook
+    description: Creates a fake webhook
+  - name: Advanced > EndShipper
+  - name: Account Management
+  - name: Account Management > API Keys
+  - name: Account Management > Users
+    description: >-
+      The User object can be used to manage your own account and to create child
+      accounts. Only a Production mode API key can be used to make requests
+      against the Users API.
+
+
+      There are two kinds of accounts. The first is the standard (parent) User
+      object. It represents your account state, settings, and credentials to log
+      in via the website. The second is the child User, which is a User that
+      belongs to a parent.
+
+
+      Balance and recharge values on User objects are expressed in higher
+      precision USD.
+  - name: Account Management > Brand
+  - name: Account Management > Billing
+  - name: Account Management > Carrier Types
+  - name: Account Management > Carrier Accounts
+  - name: Account Management > Partner White Label (Referrals)
+  - name: Account Management > Partner White Label (Referrals) > Referral Users
+  - name: Account Management > Partner White Label (Referrals) > Billing
+paths:
+  /{API_VERSION}/addresses:
+    post:
+      tags:
+        - Basics > Addresses
+      summary: Create a Strictly Verified Address
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                address:
+                  street1: 417 Montgomery Street
+                  street2: '5'
+                  city: SF
+                  state: CA
+                  zip: '94104'
+                  country: US
+                  company: EasyPost
+                  phone: 415-123-4567
+                verify_strict: true
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+    get:
+      tags:
+        - Basics > Addresses
+      summary: Retrieve All Addresses
+      parameters:
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+          example: '5'
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/addresses/create_and_verify:
+    post:
+      tags:
+        - Basics > Addresses
+      summary: Create and Verify Address
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                address:
+                  street1: 417 Montgomery Street
+                  street2: FL 5
+                  city: San Francisco
+                  state: CA
+                  zip: '94104'
+                  country: US
+                  company: EasyPost
+                  phone: 415-123-4567
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/addresses/{ADDRESS_ID}/verify:
+    get:
+      tags:
+        - Basics > Addresses
+      summary: Verify Address
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: ADDRESS_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/addresses/{ADDRESS_ID}:
+    get:
+      tags:
+        - Basics > Addresses
+      summary: Retrieve Address
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: ADDRESS_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/parcels:
+    post:
+      tags:
+        - Basics > Parcels
+      summary: Create Parcel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                parcel:
+                  length: '20.2'
+                  width: '10.9'
+                  height: '5'
+                  weight: '65.9'
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/parcels/{PARCEL_ID}:
+    get:
+      tags:
+        - Basics > Parcels
+      summary: Retrieve Parcel
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: PARCEL_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/insurances:
+    post:
+      tags:
+        - Basics > Insurances
+      summary: Create Insurance
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                insurance:
+                  to_address:
+                    id: adr_...
+                  from_address:
+                    id: adr_...
+                  tracking_code: '9400110898825022579493'
+                  carrier: USPS
+                  amount: '100.00'
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+    get:
+      tags:
+        - Basics > Insurances
+      summary: Retrieve All Insurance
+      parameters:
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+          example: '5'
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/insurances/{INSURANCE_ID}:
+    get:
+      tags:
+        - Basics > Insurances
+      summary: Retrieve Insurance
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: INSURANCE_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/shipments:
+    post:
+      tags:
+        - Basics > Shipments
+      summary: Create Shipment with EndShipper ID Option
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                shipment:
+                  to_address:
+                    name: Dr. Steve Brule
+                    street1: 179 N Harbor Dr
+                    city: Redondo Beach
+                    state: CA
+                    zip: '90277'
+                    country: US
+                    phone: '8573875756'
+                    email: dr_steve_brule@gmail.com
+                  from_address:
+                    name: EasyPost
+                    street1: 417 Montgomery Street
+                    street2: 5th Floor
+                    city: San Francisco
+                    state: CA
+                    zip: '94104'
+                    country: US
+                    phone: '4153334445'
+                    email: support@easypost.com
+                  parcel:
+                    length: '20.2'
+                    width: '10.9'
+                    height: '5'
+                    weight: '65.9'
+                  options:
+                    end_shipper_id: es_...
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+    get:
+      tags:
+        - Basics > Shipments
+      summary: Retrieve All Shipments
+      parameters:
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+          example: '5'
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/shipments/{SHIPMENT_ID}:
+    get:
+      tags:
+        - Basics > Shipments
+      summary: Retrieve Shipment
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: SHIPMENT_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/shipments/{SHIPMENT_ID}/forms:
+    post:
+      tags:
+        - Basics > Shipments
+      summary: Create Form
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                form:
+                  type: return_packing_slip
+                  barcode: RMA12345678900
+                  line_items:
+                    - product:
+                        title: Square Reader
+                        barcode: '855658003251'
+                      units: 8
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: SHIPMENT_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/shipments/{SHIPMENT_ID}/buy:
+    post:
+      tags:
+        - Basics > Shipments
+      summary: Buy Shipment with EndShipper ID
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                rate:
+                  id: rate_...
+                end_shipper_id: es_...
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: SHIPMENT_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/shipments/{SHIPMENT_ID}/label:
+    get:
+      tags:
+        - Basics > Shipments
+      summary: Convert Shipment Label
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: SHIPMENT_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/shipments/{SHIPMENT_ID}/rerate:
+    post:
+      tags:
+        - Basics > Shipments
+      summary: Regenerate Shipment Rates
+      requestBody:
+        content: {}
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: SHIPMENT_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/shipments/{SHIPMENT_ID}/smartrate:
+    get:
+      tags:
+        - Basics > Shipments
+      summary: Retrieve SmartRates of Shipment
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: SHIPMENT_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/shipments/{SHIPMENT_ID}/insure:
+    post:
+      tags:
+        - Basics > Shipments
+      summary: Insure Shipment
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                amount: '200'
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: SHIPMENT_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/shipments/{SHIPMENT_ID}/refund:
+    post:
+      tags:
+        - Basics > Shipments
+      summary: Refund Shipment
+      requestBody:
+        content: {}
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: SHIPMENT_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/shipments/{SHIPMENT_ID}/smartrate/delivery_date:
+    get:
+      tags:
+        - Basics > Shipments
+      summary: Retrieve Estimated Delivery Date
+      parameters:
+        - name: planned_ship_date
+          in: query
+          schema:
+            type: string
+          example: yyyy-mm-dd
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: SHIPMENT_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/rates/{RATE_ID}:
+    get:
+      tags:
+        - Basics > Rates
+      summary: Retrieve Rate
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: RATE_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/trackers:
+    post:
+      tags:
+        - Basics > Trackers
+      summary: Create Tracker
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                tracker:
+                  tracking_code: '9400110898825022579493'
+                  carrier: USPS
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+    get:
+      tags:
+        - Basics > Trackers
+      summary: Retrieve All Trackers
+      parameters:
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+          example: '5'
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/trackers/{TRACKER_ID}:
+    get:
+      tags:
+        - Basics > Trackers
+      summary: Retrieve Tracker
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: TRACKER_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/batches:
+    post:
+      tags:
+        - Advanced > Batches
+      summary: Create Batch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                batch:
+                  shipments:
+                    - id: shp_...
+                    - id: shp_...
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+    get:
+      tags:
+        - Advanced > Batches
+      summary: Retrieve All Batches
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/batches/{BATCH_ID}/add_shipments:
+    post:
+      tags:
+        - Advanced > Batches
+      summary: Add Shipments to Batch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                shipments:
+                  - id: shp_...
+                  - id: shp_...
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: BATCH_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/batches/{BATCH_ID}/remove_shipments:
+    post:
+      tags:
+        - Advanced > Batches
+      summary: Remove Shipments from Batch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                shipments:
+                  - id: shp_...
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: BATCH_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/batches/{BATCH_ID}/buy:
+    post:
+      tags:
+        - Advanced > Batches
+      summary: Buy Batch
+      requestBody:
+        content: {}
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: BATCH_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/batches/{BATCH_ID}/label:
+    post:
+      tags:
+        - Advanced > Batches
+      summary: Batch Labels
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                file_format: PDF
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: BATCH_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/batches/{BATCH_ID}/scan_form:
+    post:
+      tags:
+        - Advanced > Batches
+      summary: Manifest Batch
+      requestBody:
+        content: {}
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: BATCH_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/batches/{BATCH_ID}:
+    get:
+      tags:
+        - Advanced > Batches
+      summary: Retrieve Batch
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: BATCH_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/metadata/carriers:
+    get:
+      tags:
+        - Advanced > Carrier Metadata
+      summary: Retrieve Carrier Metadata
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/customs_infos:
+    post:
+      tags:
+        - Advanced > CustomsInfo
+      summary: Create Customs Info
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                customs_info:
+                  customs_certify: 'true'
+                  customs_signer: Steve Brule
+                  contents_type: merchandise
+                  contents_explanation: ''
+                  restriction_type: none
+                  eel_pfc: NOEEI 30.37(a)
+                  customs_items:
+                    - description: T-shirt
+                      quantity: '1'
+                      weight: '5'
+                      value: '10'
+                      hs_tariff_number: '123456'
+                      origin_country: US
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/customs_infos/{CUSTOMS_INFO_ID}:
+    get:
+      tags:
+        - Advanced > CustomsInfo
+      summary: Retrieve Customs Info
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: CUSTOMS_INFO_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/customs_items:
+    post:
+      tags:
+        - Advanced > CustomsItem
+      summary: Create Customs Item
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                customs_item:
+                  description: T-shirt
+                  quantity: '1'
+                  weight: '5'
+                  value: '10'
+                  hs_tariff_number: '123456'
+                  origin_country: US
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/customs_items/{CUSTOMS_ITEM_ID}:
+    get:
+      tags:
+        - Advanced > CustomsItem
+      summary: Retrieve Customs Item
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: CUSTOMS_ITEM_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/events:
+    get:
+      tags:
+        - Advanced > Events
+      summary: Retrieve All Events
+      parameters:
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+          example: '5'
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/events/{EVENT_ID}:
+    get:
+      tags:
+        - Advanced > Events
+      summary: Retrieve Event
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: EVENT_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/events/{EVENT_ID}/payloads:
+    get:
+      tags:
+        - Advanced > Events
+      summary: Retrieve All Event Payloads
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: EVENT_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/events/{EVENT_ID}/payloads/{PAYLOAD_ID}:
+    get:
+      tags:
+        - Advanced > Events
+      summary: Retrieve Event Payload
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: EVENT_ID
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: PAYLOAD_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/orders:
+    post:
+      tags:
+        - Advanced > Orders
+      summary: One-Call Buy Order
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                order:
+                  to_address:
+                    id: adr_...
+                  from_address:
+                    id: adr_...
+                  shipments:
+                    - parcel:
+                        weight: '10.2'
+                    - parcel:
+                        predefined_package: FedExBox
+                        weight: '17.5'
+                  service: NextDayAir
+                  carrier_accounts:
+                    - ca_...
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+    get:
+      tags:
+        - Advanced > Orders
+      summary: Retrieve Order
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/orders/{ORDER_ID}/buy:
+    post:
+      tags:
+        - Advanced > Orders
+      summary: Buy Order
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                carrier: FedEx
+                service: FEDEX_GROUND
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: ORDER_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/pickups:
+    post:
+      tags:
+        - Advanced > Pickup
+      summary: Create Pickup
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                pickup:
+                  reference: my-first-pickup
+                  min_datetime: '2022-10-01 10:30:00'
+                  max_datetime: '2022-10-02 10:30:00'
+                  shipment:
+                    id: shp_...
+                  address:
+                    id: adr_...
+                  is_account_address: 'false'
+                  instructions: Special pickup instructions
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+    get:
+      tags:
+        - Advanced > Pickup
+      summary: Retrieve All Pickups
+      parameters:
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+          example: '5'
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/pickups/{PICKUP_ID}:
+    get:
+      tags:
+        - Advanced > Pickup
+      summary: Retrieve Pickup
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: PICKUP_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/pickups/{PICKUP_ID}/buy:
+    post:
+      tags:
+        - Advanced > Pickup
+      summary: Buy Pickup
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                carrier: UPS
+                service: Same-Day Pickup
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: PICKUP_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/pickups/{PICKUP_ID}/cancel:
+    post:
+      tags:
+        - Advanced > Pickup
+      summary: Cancel Pickup
+      requestBody:
+        content: {}
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: PICKUP_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/reports/{REPORT_TYPE}:
+    post:
+      tags:
+        - Advanced > Reports
+      summary: Create Report
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                start_date: '2016-10-01'
+                end_date: '2016-10-31'
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: REPORT_TYPE
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+    get:
+      tags:
+        - Advanced > Reports
+      summary: Retrieve All Reports
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: REPORT_TYPE
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/reports/{REPORT_ID}:
+    get:
+      tags:
+        - Advanced > Reports
+      summary: Retrieve Report
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: REPORT_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/scan_forms:
+    post:
+      tags:
+        - Advanced > ScanForms
+      summary: Create ScanForm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                shipments:
+                  - id: shp_...
+                  - id: shp_...
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+    get:
+      tags:
+        - Advanced > ScanForms
+      summary: Retrieve All ScanForms
+      parameters:
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+          example: '5'
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/scan_forms/{SCANFORM_ID}:
+    get:
+      tags:
+        - Advanced > ScanForms
+      summary: Retrieve ScanForm
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: SCANFORM_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/webhooks:
+    post:
+      tags:
+        - Advanced > Webhook
+      summary: Create Webhook
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                webhook:
+                  url: http://example.com
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+    get:
+      tags:
+        - Advanced > Webhook
+      summary: Retrieve All Webhooks
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/webhooks/{WEBHOOK_ID}:
+    get:
+      tags:
+        - Advanced > Webhook
+      summary: Retrieve Webhook
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: WEBHOOK_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+    patch:
+      tags:
+        - Advanced > Webhook
+      summary: Update Webhook
+      requestBody:
+        content: {}
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: WEBHOOK_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+    delete:
+      tags:
+        - Advanced > Webhook
+      summary: Delete Webhook
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: WEBHOOK_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/end_shippers:
+    post:
+      tags:
+        - Advanced > EndShipper
+      summary: Create EndShipper
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                address:
+                  name: FOO BAR
+                  company: BAZ
+                  street1: 164 TOWNSEND STREET UNIT 1
+                  street2: UNIT 1
+                  city: SAN FRANCISCO
+                  state: CA
+                  zip: '94107'
+                  country: US
+                  phone: 555 555-5555
+                  email: FOO@EXAMPLE.COM
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+    get:
+      tags:
+        - Advanced > EndShipper
+      summary: Retrieve All EndShippers
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/end_shippers/{ENDSHIPPER_ID}:
+    put:
+      tags:
+        - Advanced > EndShipper
+      summary: Update EndShipper
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                address:
+                  name: NEW NAME
+                  company: BAZ
+                  street1: 164 TOWNSEND STREET UNIT 1
+                  street2: UNIT 1
+                  city: SAN FRANCISCO
+                  state: CA
+                  zip: '94107'
+                  country: US
+                  phone: 555 555-5555
+                  email: FOO@EXAMPLE.COM
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: ENDSHIPPER_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/end_shippers/{ENDSHIIPPER_ID}:
+    get:
+      tags:
+        - Advanced > EndShipper
+      summary: Retrieve EndShipper
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: ENDSHIIPPER_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/api_keys:
+    get:
+      tags:
+        - Account Management > API Keys
+      summary: Retrieve API Keys
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/users/{USER_ID}:
+    get:
+      tags:
+        - Account Management > Users
+      summary: Retrieve User
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: USER_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+    patch:
+      tags:
+        - Account Management > Users
+      summary: Update Child User
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                user:
+                  name: Test Child
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: USER_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/users:
+    get:
+      tags:
+        - Account Management > Users
+      summary: Retrieve Authenticated User
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+    patch:
+      tags:
+        - Account Management > Users
+      summary: Update Authenticated User
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                user:
+                  recharge_threshold: '50.00'
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+    post:
+      tags:
+        - Account Management > Partner White Label (Referrals) > Billing
+      summary: 'Step 2: Configure Recharge Threshold and Recharge Amount'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                recharge_amount: '100.00'
+                secondary_recharge_amount: '50.00'
+                recharge_threshold: '25.00'
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/users/{CHILD_USER_ID}:
+    delete:
+      tags:
+        - Account Management > Users
+      summary: Delete Child User
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: CHILD_USER_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/users/{USER_ID}/brand:
+    patch:
+      tags:
+        - Account Management > Brand
+      summary: Update Brand
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                brand:
+                  background_color: '#FFFFFF'
+                  color: '#303F9F'
+                  logo: data:image/png;base64,iVBORw0K...
+                  logo_href: https://www.easypost.com
+                  ad: 'null'
+                  ad_href: 'null'
+                  theme: theme1
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: USER_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/credit_cards/{CREDIT_CARD_ID}/charges:
+    post:
+      tags:
+        - Account Management > Billing
+      summary: Fund Wallet via Credit Card
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                amount: '2000'
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: CREDIT_CARD_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/bank_accounts/{BANK_ACCOUNT_ID}/charges:
+    post:
+      tags:
+        - Account Management > Billing
+      summary: Fund Wallet via Bank Account
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                amount: '2000'
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: BANK_ACCOUNT_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/payment_methods:
+    get:
+      tags:
+        - Account Management > Billing
+      summary: Retrieve Payment Methods
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/credit_cards/{CREDIT_CARD_ID}:
+    delete:
+      tags:
+        - Account Management > Billing
+      summary: Delete Credit Card
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: CREDIT_CARD_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/bank_accounts/{BANK_ACCOUNT_ID}:
+    delete:
+      tags:
+        - Account Management > Billing
+      summary: Delete Bank Account
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: BANK_ACCOUNT_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/carrier_types:
+    get:
+      tags:
+        - Account Management > Carrier Types
+      summary: Retrieve Carrier Types
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/carrier_accounts:
+    post:
+      tags:
+        - Account Management > Carrier Accounts
+      summary: Create Carrier Account
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                carrier_account:
+                  type: DhlEcsAccount
+                  description: CA Location DHL eCommerce Solutions Account
+                  credentials:
+                    client_id: '123456'
+                    client_secret: 123abc
+                    distribution_center: USLAX1
+                    pickup_id: '123456'
+                  test_credentials:
+                    client_id: '123456'
+                    client_secret: 123abc
+                    distribution_center: USLAX1
+                    pickup_id: '123456'
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+    get:
+      tags:
+        - Account Management > Carrier Accounts
+      summary: Retrieve All Carrier Accounts
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/carrier_accounts/{CARRIER_ACCOUNT_ID}:
+    get:
+      tags:
+        - Account Management > Carrier Accounts
+      summary: Retrieve Carrier Account
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: CARRIER_ACCOUNT_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+    patch:
+      tags:
+        - Account Management > Carrier Accounts
+      summary: Update Carrier Account
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                carrier_account:
+                  credentials:
+                    pickup_id: abc123
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: CARRIER_ACCOUNT_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+    delete:
+      tags:
+        - Account Management > Carrier Accounts
+      summary: Delete Carrier Account
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: CARRIER_ACCOUNT_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/referral_customers:
+    post:
+      tags:
+        - Account Management > Partner White Label (Referrals) > Referral Users
+      summary: Create Referral User
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                user:
+                  name: Firstname Lastname
+                  email: email@example.com
+                  phone: '8888888888'
+      parameters:
+        - name: Partner
+          in: header
+          schema:
+            type: string
+          example: '{{PARTNER_NAME}}'
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+    get:
+      tags:
+        - Account Management > Partner White Label (Referrals) > Referral Users
+      summary: Retrieve Referral Users
+      parameters:
+        - name: Partner
+          in: header
+          schema:
+            type: string
+          example: '{{PARTNER_NAME}}'
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/referral_customers/{REFERRAL_USER_ID}:
+    put:
+      tags:
+        - Account Management > Partner White Label (Referrals) > Referral Users
+      summary: Update Referral User Email
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                user:
+                  email: email@example.com
+      parameters:
+        - name: Partner
+          in: header
+          schema:
+            type: string
+          example: '{{PARTNER_NAME}}'
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+        - name: REFERRAL_USER_ID
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/partners/stripe_public_key:
+    get:
+      tags:
+        - Account Management > Partner White Label (Referrals) > Billing
+      summary: 'Step 1a: Retrieve EasyPost''s Public Stripe API Key'
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /v1/tokens:
+    post:
+      tags:
+        - Account Management > Partner White Label (Referrals) > Billing
+      summary: 'Step 1b: Get Token from Stripe'
+      description: >-
+        You can visit the stripe collection for this step:
+
+
+        [https://www.postman.com/stripedev/workspace/stripe-developers/request/665823-9a7a1c69-1a12-47a6-b38d-095e5069e0b8](https://www.postman.com/stripedev/workspace/stripe-developers/request/665823-9a7a1c69-1a12-47a6-b38d-095e5069e0b8)
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                card[number]:
+                  type: integer
+                  example: '4242424242424242'
+                card[exp_month]:
+                  type: integer
+                  example: '6'
+                card[exp_year]:
+                  type: integer
+                  example: '2023'
+                card[cvc]:
+                  type: integer
+                  example: '314'
+      security:
+        - basicAuth: []
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
+  /{API_VERSION}/credit_cards:
+    post:
+      tags:
+        - Account Management > Partner White Label (Referrals) > Billing
+      summary: 'Step 1c: Create Credit Card'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              example:
+                stripe_object_id: tok_1KPY4R265asdf51sdf1wUZv
+                priority: primary
+      parameters:
+        - name: API_VERSION
+          in: path
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json: {}
