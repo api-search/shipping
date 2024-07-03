@@ -5,14 +5,18 @@ description: >-
   and cost savings.
 image: https://kinlane-productions2.s3.amazonaws.com/apis-json/apis-json-logo.jpg
 url: https://raw.githubusercontent.com/apis-json/artisanal/main/apis/shipengine.yml
-created: 2023-10-06
-modified: 2024-06-07
+created: '2023-10-06T00:00:00.000Z'
+modified: '2024-07-03'
 specificationVersion: '0.18'
 tags: []
 apis:
   - name: ShipEngine API
     description: >-
-      ShipEngine's easy-to-use REST API lets you manage all of your shipping needs without worrying about the complexities of different carrier APIs and protocols. We handle all the heavy lifting so you can focus on providing a first-class shipping experience for your customers at the best possible prices.
+      ShipEngine's easy-to-use REST API lets you manage all of your shipping
+      needs without worrying about the complexities of different carrier APIs
+      and protocols. We handle all the heavy lifting so you can focus on
+      providing a first-class shipping experience for your customers at the best
+      possible prices.
     image: https://kinlane-productions2.s3.amazonaws.com/apis-json/apis-json-logo.jpg
     humanURL: https://www.shipengine.com/docs/
     baseURL: https://api.example.com
@@ -57,3 +61,4 @@ overlays:
   - type: API Evangelist Ratings
     url: overlays/apis-io-search.yml
 aid: shipengine
+score: 41
