@@ -7,7 +7,7 @@ description: >-
   offer a Shipping API that solves complex logistics problems for online
   merchants, enabling the delivery of an online shopping experience that
   delights customers. ~ https://www.easypost.com
-url: https://example.com/apis/about-us-easypost.yml
+url: https://raw.githubusercontent.com/api-search/shipping/main/_apis/easypost/apis.md
 created: 2024/04/14
 modified: '2024-07-03'
 specificationVersion: '0.18'

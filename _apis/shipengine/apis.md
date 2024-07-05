@@ -5,7 +5,7 @@ description: >-
   Global commerce leaders trust the #1 shipping API to unlock significant time
   and cost savings.
 image: https://kinlane-productions2.s3.amazonaws.com/apis-json/apis-json-logo.jpg
-url: https://raw.githubusercontent.com/apis-json/artisanal/main/apis/shipengine.yml
+url: https://raw.githubusercontent.com/api-search/shipping/main/_apis/shipengine/apis.md
 created: '2023-10-06T00:00:00.000Z'
 modified: '2024-07-03'
 specificationVersion: '0.18'

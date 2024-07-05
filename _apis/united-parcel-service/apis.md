@@ -6,7 +6,7 @@ description: >-
   overall customer satisfaction by integrating UPS transport functionality into
   your processes for small package, LTL and air freight shipment. ~
   https://developer.ups.com/catalog?loc=en_US
-url: https://example.com/apis/api-catalog-ups.yml
+url: https://raw.githubusercontent.com/api-search/shipping/main/_apis/united-parcel-service/apis.md
 created: 2024/04/14
 modified: '2024-07-03'
 specificationVersion: '0.18'

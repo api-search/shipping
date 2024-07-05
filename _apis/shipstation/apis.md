@@ -9,7 +9,7 @@ description: >-
   website/OMS with carriers individually. Let’s take a closer look at a shipping
   API’s key features and its benefits. ~
   https://www.shipstation.com/blog/choosing-a-shipping-api/
-url: https://example.com/apis/how-to-choose-a-shipping-api-shipstation.yml
+url: https://raw.githubusercontent.com/api-search/shipping/main/_apis/shipstation/apis.md
 created: 2024/04/14
 modified: '2024-07-03'
 specificationVersion: '0.18'
