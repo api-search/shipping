@@ -8,7 +8,8 @@ url: https://raw.githubusercontent.com/api-search/shipping/main/_data/shipengine
 created: '2023-10-06T00:00:00.000Z'
 modified: '2024-07-04'
 specificationVersion: '0.18'
-tags: []
+tags:
+  - Shipping
 apis:
   - name: ShipEngine API
     description: >-
